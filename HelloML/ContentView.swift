@@ -7,12 +7,16 @@
 
 import SwiftUI
 import CoreML
+import PhotosUI
 
 struct ContentView: View {
     @State private var currentIndex = 0
     @State private var imagePrediction: String = ""
     @State private var confidences: [String: Double] = [:]
     @State private var inferenceError: String = ""
+    @State private var selectedPhoto: PhotosPickerItem? = nil
+    @State private var photoImage: UIImage? = UIImage(named: "cat_113" )
+    @State private var isCameraSelected: Bool = false
 
     let images: [String] = [
         "cat_113",
@@ -40,23 +44,22 @@ struct ContentView: View {
 
     var body: some View {
         VStack {
-            Image(images[currentIndex])
+            Image(uiImage: photoImage ?? UIImage(named: "cat_113" )!)
                 .resizable()
-                .aspectRatio(contentMode: .fit)
+                .scaledToFit()
                 .frame(width: 300, height: 300)
 
             HStack {
-                Button("Previous") {
-                    currentIndex -= 1
-                }
-                .buttonStyle(.bordered)
-                .disabled(currentIndex == 0)
+                
+                PhotosPicker(selection: $selectedPhoto, matching: .images){
+                    Text("Select an image")
+                }.buttonStyle(.bordered)
 
-                Button("Next") {
-                    currentIndex += 1
+                Button("Camera") {
+                    isCameraSelected = true
                 }
                 .buttonStyle(.bordered)
-                .disabled(currentIndex == images.count - 1)
+                
             }
 
             Button("Predict") {
@@ -78,7 +81,28 @@ struct ContentView: View {
             }
 
             PredictionView(probs: Array(sortedProbs))
+        }.onChange(of: selectedPhoto, { oldValue, newValue in
+            if oldValue == newValue {
+                return
+            }
+            if let newValue {
+                newValue.loadTransferable(type: Data.self, completionHandler: { result in
+                    switch result {
+                    case .success(let data):
+                        guard let img = UIImage(data: data!) else {
+                            return
+                        }
+                        photoImage = img
+                    case .failure(let error):
+                        print("Error loading image data: \(error)")
+                    }
+                })
+            }
+        })
+        .sheet(isPresented: $isCameraSelected, content: {
+            ImagePickerCamera(image: $photoImage, sourceType: .camera)
         }
+    )
         .padding()
     }
 
@@ -95,8 +119,8 @@ struct ContentView: View {
             return
         }
 
-        guard let uiimage = UIImage(named: images[currentIndex]) else {
-            inferenceError = "Unable to load image: \(images[currentIndex])."
+        guard let uiimage = photoImage else {
+            inferenceError = "Unable to load image: \(photoImage)."
             return
         }
 
